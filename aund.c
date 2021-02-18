@@ -13,7 +13,7 @@
  *    documentation and/or other materials provided with the distribution.
  * 3. The name of the author may not be used to endorse or promote products
  *    derived from this software without specific prior written permission.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
  * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
@@ -28,7 +28,7 @@
 /*
  * This is part of aund, an implementation of Acorn Universal
  * Networking for Unix.
- */	
+ */
 
 #include <sys/types.h>
 #include <sys/time.h>
@@ -49,7 +49,7 @@
 
 #define EC_PORT_FS 0x99
 
-extern const struct aun_funcs aun, beebem;
+extern const struct aun_funcs aun, beebem, econet;
 extern char **environ;
 
 int debug = 0;
@@ -103,12 +103,13 @@ main(int argc, char *argv[])
 	char const *conffile = "/etc/aund.conf";
 	char const *pidfile = "/var/run/aund.pid";
 	int c;
-    pid_t child_pid;
+        pid_t child_pid;
 	int override_debug = -1;
 	int override_syslog = -1;
+        int use_af_econet = -1;
 
 	progname = argv[0];
-	while ((c = getopt(argc, argv, "c:dDfp:sS")) != -1) {
+	while ((c = getopt(argc, argv, "c:dDEfp:sS")) != -1) {
 		switch (c) {
 		case '?':
 			usage();      /* getopt parsing error */
@@ -121,6 +122,9 @@ main(int argc, char *argv[])
 		case 'D':
 			override_debug = 0;
 			break;
+                case 'E':
+                        use_af_econet = 1;
+                        break;
 		case 'f':
 			foreground = 1;
 			break;
@@ -139,6 +143,8 @@ main(int argc, char *argv[])
 	conf_init(conffile);
 	if (beebem_cfg_file)
 		aunfuncs = &beebem;
+        if (use_af_econet)
+                aunfuncs = &econet;
 
 	fs_init();
 
