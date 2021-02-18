@@ -31,7 +31,7 @@ aund_SOURCES = extern.h aund.c \
 	fileserver.c fs_cli.c fs_examine.c \
 	fs_fileio.c fs_misc.c fs_handle.c fs_util.c fs_error.c \
 	fs_nametrans.c fs_filetype.c \
-	aun.h aun.c beebem.c pw.c user_null.c \
+	aun.h aun.c beebem.c econet.c pw.c user_null.c \
 	version.h
 aund_LDADD = libconf_lex.a $(LIBOBJS)
 AM_CFLAGS = $(GCCWARNINGS)

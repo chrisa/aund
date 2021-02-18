@@ -13,7 +13,7 @@
  *    documentation and/or other materials provided with the distribution.
  * 3. The name of the author may not be used to endorse or promote products
  *    derived from this software without specific prior written permission.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
  * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
@@ -49,7 +49,8 @@
 
 #define EC_PORT_FS 0x99
 
-extern const struct aun_funcs aun, beebem;
+extern const struct aun_funcs aun, beebem, econet;
+extern char **environ;
 
 int debug = 0;
 int foreground = 0;
@@ -100,47 +101,53 @@ dopidfile(char const *pidfile)
 int
 main(int argc, char *argv[])
 {
-    char const *conffile = "/etc/aund.conf";
-    char const *pidfile = "/var/run/aund.pid";
-    int c;
-    #ifdef __APPLE__
+	char const *conffile = "/etc/aund.conf";
+	char const *pidfile = "/var/run/aund.pid";
+	int c;
+#ifdef __APPLE__
     pid_t child_pid;
-    #endif
-    int override_debug = -1;
-    int override_syslog = -1;
+#endif
+	int override_debug = -1;
+	int override_syslog = -1;
+        int use_af_econet = -1;
 
-    progname = argv[0];
-    while ((c = getopt(argc, argv, "c:dDfp:sS")) != -1) {
-        switch (c) {
-        case '?':
-            usage();      /* getopt parsing error */
-        case 'c':
-            conffile = optarg;
+	progname = argv[0];
+	while ((c = getopt(argc, argv, "c:dDEfp:sS")) != -1) {
+		switch (c) {
+		case '?':
+			usage();      /* getopt parsing error */
+		case 'c':
+			conffile = optarg;
+			break;
+		case 'd':
+			override_debug = 1;
+			break;
+		case 'D':
+			override_debug = 0;
+			break;
+        case 'E':
+            use_af_econet = 1;
             break;
-        case 'd':
-            override_debug = 1;
-            break;
-        case 'D':
-            override_debug = 0;
-            break;
-        case 'f':
-            foreground = 1;
-            break;
-        case 'p':
-            pidfile = optarg;
-        case 's':
-            override_syslog = 1;
-            break;
-        case 'S':
-            override_syslog = 0;
-            break;
-        }
-    }
+		case 'f':
+			foreground = 1;
+			break;
+		case 'p':
+			pidfile = optarg;
+		case 's':
+			override_syslog = 1;
+			break;
+		case 'S':
+			override_syslog = 0;
+			break;
+		}
+	}
 
-    sig_init();
-    conf_init(conffile);
-    if (beebem_cfg_file)
-        aunfuncs = &beebem;
+	sig_init();
+	conf_init(conffile);
+	if (beebem_cfg_file)
+		aunfuncs = &beebem;
+    if (use_af_econet)
+        aunfuncs = &econet;
 
     fs_init();
 
