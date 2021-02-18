@@ -10,7 +10,10 @@ config.status
 depcomp
 tags
 config.status
-
-
-
-
+autom4te.cache
+Makefile
+aund
+aclocal.m4
+compile
+config.h
+configure
