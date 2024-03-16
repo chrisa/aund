@@ -9,8 +9,10 @@ Config.h.in
 config.status
 depcomp
 tags
-config.status
-
-
-
-
+Makefile
+autom4te.cache
+config.h
+aund
+*~
+.#*
+*#
