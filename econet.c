@@ -136,16 +136,19 @@ static ssize_t econet_listen(struct econet_addr *addr, int forever)
 
 static long cookie = 0;
 
-static void econet_send(struct econet_addr *to, const void *data, ssize_t len)
+static void econet_send(struct econet_addr *to, int immediate, const void *data, ssize_t len)
 {
         struct sockaddr_ec name;
+        int flags;
 
         memset(&name, 0, sizeof(name));
         name.addr.station = to->station;
         name.addr.net = to->network;
         name.cookie = cookie++;
 
-        if (sendto(sock, data, len, 0, (struct sockaddr*)&name, sizeof(name)) < 0)
+        flags = immediate ? MSG_EOR : 0;
+
+        if (sendto(sock, data, len, flags, (struct sockaddr*)&name, sizeof(name)) < 0)
                 err(1, "sendto");
 }
 
@@ -192,7 +195,7 @@ econet_recv(ssize_t *outsize, struct aun_srcaddr *vfrom, int want_port)
                                 ack[2] = AUND_VERSION_MINOR;
                                 ack[3] = AUND_VERSION_MAJOR;
                         }
-                        econet_send(&scoutaddr, ack, 4);
+                        econet_send(&scoutaddr, 1, ack, 4);
                         continue;
                 }
 
@@ -239,7 +242,7 @@ econet_recv(ssize_t *outsize, struct aun_srcaddr *vfrom, int want_port)
                  */
                 count = 1;
                 do {
-                        econet_send(&scoutaddr, ack, 0);
+                        econet_send(&scoutaddr, 0, ack, 0);
                         msgsize = econet_listen(&mainaddr, 0);
                         if (msgsize != 0) {
                                 if (mainaddr.network != scoutaddr.network ||
@@ -268,7 +271,7 @@ econet_recv(ssize_t *outsize, struct aun_srcaddr *vfrom, int want_port)
                  * ACK that too. (We can reuse the ACK we
                  * constructed above.)
                  */
-                econet_send(&scoutaddr, ack, 0);
+                econet_send(&scoutaddr, 0, ack, 0);
 
                 /*
                  * Now fake up an aun_packet structure to return.
@@ -311,7 +314,7 @@ econet_xmit(struct aun_packet *spkt, size_t len, struct aun_srcaddr *vto)
 
         count = 5;
         do {
-                econet_send(&ato->eaddr, sbuf, 2);
+                econet_send(&ato->eaddr, 0, sbuf, 2);
                 msgsize = econet_listen(&ackaddr, 0);
                 if (msgsize > 0) {
                         /*
@@ -356,7 +359,7 @@ econet_xmit(struct aun_packet *spkt, size_t len, struct aun_srcaddr *vto)
         memcpy(sbuf, spkt->data, payloadlen);
         count = 1; // no point retrying here?
         do {
-                econet_send(&ato->eaddr, sbuf, payloadlen);
+                econet_send(&ato->eaddr, 0, sbuf, payloadlen);
                 msgsize = econet_listen(&ackaddr, 0);
                 if (msgsize > 0) {
                         /*
