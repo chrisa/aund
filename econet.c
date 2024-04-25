@@ -64,7 +64,7 @@ static struct aun_packet *const rpkt = (struct aun_packet *)rbuf;
 
 /* Offset of packet payload in struct aun_packet:
  * size of AUN header minus size of Econet header. */
-#define PKTOFF (offsetof(struct aun_packet, data) - 4)
+#define PKTOFF (offsetof(struct aun_packet, data))
 
 union internal_addr {
         struct aun_srcaddr srcaddr;
@@ -96,15 +96,14 @@ static void econet_setup(void)
                 err(1, "fcntl(F_SETFL)");
 }
 
-static ssize_t econet_listen(struct econet_addr *addr, int forever)
+static ssize_t econet_listen(struct sockaddr_ec *from, int forever)
 {
         ssize_t msgsize;
-        struct sockaddr_ec from;
         fd_set r;
         struct timeval timeout;
 
         while (1) {
-                socklen_t fromlen = sizeof(from);
+                socklen_t fromlen = sizeof(*from);
                 int i;
 
                 /*
@@ -118,17 +117,14 @@ static ssize_t econet_listen(struct econet_addr *addr, int forever)
                 timeout.tv_usec = 100000;   /* 100ms */
                 i = select(sock+1, &r, NULL, NULL, forever ? NULL : &timeout);
                 if (i == 0)
-                        return 0;      /* nothing turned up */
+                        return -1;      /* nothing turned up */
 
                 msgsize = recvfrom(sock, rbuf + PKTOFF,
                                    sizeof(rbuf) - PKTOFF,
-                                   0, (struct sockaddr *)&from, &fromlen);
+                                   0, (struct sockaddr *)from, &fromlen);
+
                 if (msgsize == -1)
                         err(1, "recvfrom");
-
-                /* Who's it from? */
-                addr->station = from.addr.station;
-                addr->network = from.addr.net;
 
                 return msgsize;
         }
@@ -136,19 +132,11 @@ static ssize_t econet_listen(struct econet_addr *addr, int forever)
 
 static long cookie = 0;
 
-static void econet_send(struct econet_addr *to, int immediate, const void *data, ssize_t len)
+static void econet_send(struct sockaddr_ec *to, int immediate, const void *data, ssize_t len)
 {
-        struct sockaddr_ec name;
-        int flags;
+        int flags = immediate ? MSG_EOR : 0;
 
-        memset(&name, 0, sizeof(name));
-        name.addr.station = to->station;
-        name.addr.net = to->network;
-        name.cookie = cookie++;
-
-        flags = immediate ? MSG_EOR : 0;
-
-        if (sendto(sock, data, len, flags, (struct sockaddr*)&name, sizeof(name)) < 0)
+        if (sendto(sock, data, len, flags, (struct sockaddr*)to, sizeof(*to)) < 0)
                 err(1, "sendto");
 }
 
@@ -160,8 +148,8 @@ econet_recv(ssize_t *outsize, struct aun_srcaddr *vfrom, int want_port)
         int ctlbyte, destport;
         int count, forever;
         unsigned char ack[4];
-        struct econet_addr scoutaddr;
-        struct econet_addr mainaddr;
+        struct sockaddr_ec scoutaddr;
+        struct sockaddr_ec mainaddr;
 
         /*
          * If we're told to listen for a packet from a particular
@@ -179,17 +167,17 @@ econet_recv(ssize_t *outsize, struct aun_srcaddr *vfrom, int want_port)
                  */
                 msgsize = econet_listen(&scoutaddr, forever);
 
-                if (msgsize == 0) {
+                if (msgsize < 0) {
                         count--;
                         continue;
                 }
 
-                if (rbuf[PKTOFF+5] == 0) {
+                if (scoutaddr.port == 0) {
                         /*
                          * Port 0 means an immediate operation. We
                          * only support Machine Type Peek.
                          */
-                        if (rbuf[PKTOFF+4] == 0x88) {
+                        if (scoutaddr.cb == 0x88) {
                                 ack[0] = AUND_MACHINE_PEEK_LO;
                                 ack[1] = AUND_MACHINE_PEEK_HI;
                                 ack[2] = AUND_VERSION_MINOR;
@@ -205,29 +193,29 @@ econet_recv(ssize_t *outsize, struct aun_srcaddr *vfrom, int want_port)
                  * without ACK if we didn't get it.
                  */
                 if (((afrom->eaddr.network || afrom->eaddr.station) &&
-                     (afrom->eaddr.network != scoutaddr.network ||
-                      afrom->eaddr.station != scoutaddr.station)) ||
-                    (want_port && want_port != rbuf[PKTOFF+5])) {
+                     (afrom->eaddr.network != scoutaddr.addr.net ||
+                      afrom->eaddr.station != scoutaddr.addr.station)) ||
+                    (want_port && want_port != scoutaddr.port)) {
                         if (debug)
                                 printf("ignoring packet from %d.%d for port"
-                                       " %d during other transaction\n",
-                                       scoutaddr.network, scoutaddr.station,
-                                       rbuf[PKTOFF+5]);
+                                       " 0x%x during other transaction\n",
+                                       scoutaddr.addr.net, scoutaddr.addr.station,
+                                       scoutaddr.port);
                         if (!forever) count--;
                         continue;
                 }
 
-                if (msgsize != 6) {
+                if (msgsize != 0) {
                         if (debug)
                                 printf("received wrong-size scout packet "
                                     "(%zd) from %d.%d\n",
-                                    msgsize, scoutaddr.network, scoutaddr.station);
+                                    msgsize, scoutaddr.addr.net, scoutaddr.addr.station);
                         if (!forever) count--;
                         continue;
                 }
 
-                ctlbyte = rbuf[PKTOFF+4];
-                destport = rbuf[PKTOFF+5];
+                ctlbyte = scoutaddr.cb;
+                destport = scoutaddr.port;
 
                 /*
                  * Send an ACK, repeatedly if necessary, and wait
@@ -242,17 +230,19 @@ econet_recv(ssize_t *outsize, struct aun_srcaddr *vfrom, int want_port)
                  */
                 count = 1;
                 do {
+                        scoutaddr.cb = 0;
+                        scoutaddr.port = 0;
                         econet_send(&scoutaddr, 0, ack, 0);
                         msgsize = econet_listen(&mainaddr, 0);
                         if (msgsize != 0) {
-                                if (mainaddr.network != scoutaddr.network ||
-                                        mainaddr.station != scoutaddr.station) {
+                                if (mainaddr.addr.net != scoutaddr.addr.net ||
+                                        mainaddr.addr.station != scoutaddr.addr.station) {
                                         if (debug)
                                                 printf("ignoring packet from"
                                                        " %d.%d during other"
                                                        " transaction\n",
-                                                       mainaddr.network,
-                                                       mainaddr.station);
+                                                       mainaddr.addr.net,
+                                                       mainaddr.addr.station);
                                         msgsize = 0;   /* go round again */
                                 }
                         }
@@ -263,7 +253,7 @@ econet_recv(ssize_t *outsize, struct aun_srcaddr *vfrom, int want_port)
                         if (debug)
                                 printf("received scout from %d.%d but "
                                        "payload packet never arrived\n",
-                                       scoutaddr.network, scoutaddr.station);
+                                       scoutaddr.addr.net, scoutaddr.addr.station);
                         continue;
                 }
 
@@ -283,8 +273,8 @@ econet_recv(ssize_t *outsize, struct aun_srcaddr *vfrom, int want_port)
                 memset(rpkt->seq, 0, 4);
                 *outsize = msgsize + PKTOFF;
                 memset(afrom, 0, sizeof(struct aun_srcaddr));
-                afrom->eaddr.network = scoutaddr.network;
-                afrom->eaddr.station = scoutaddr.station;
+                afrom->eaddr.network = scoutaddr.addr.net;
+                afrom->eaddr.station = scoutaddr.addr.station;
                 return rpkt;
         }
 
@@ -298,7 +288,9 @@ econet_xmit(struct aun_packet *spkt, size_t len, struct aun_srcaddr *vto)
         union internal_addr *ato = (union internal_addr *)vto;
         int count;
         ssize_t msgsize, payloadlen;
-        struct econet_addr ackaddr;
+        struct sockaddr_ec ackaddr;
+        struct sockaddr_ec scoutaddr;
+        struct sockaddr_ec mainaddr;
 
         if (len > sizeof(sbuf) - 4) {
                 if (debug)
@@ -309,33 +301,43 @@ econet_xmit(struct aun_packet *spkt, size_t len, struct aun_srcaddr *vto)
         /*
          * Send the scout packet, and wait for an ACK.
          */
-        sbuf[0] = 0x80 | spkt->flag;
-        sbuf[1] = spkt->dest_port;
+
+        // TODO!!!
+        // This is totally faking scouts!
+        // We are sending a main-data packet of length 2, where the data
+        // is the cb/port, but setting those fields in the sockaddr to zero...
+        // sbuf[0] = 0x80 | spkt->flag;
+        // sbuf[1] = spkt->dest_port;
+
+        scoutaddr.addr.net = ato->eaddr.network;
+        scoutaddr.addr.station = ato->eaddr.station;
+        scoutaddr.cb = 0x80 | spkt->flag;
+        scoutaddr.port = spkt->dest_port;
 
         count = 5;
         do {
-                econet_send(&ato->eaddr, 0, sbuf, 2);
+                econet_send(&scoutaddr, 0, sbuf, 0);
                 msgsize = econet_listen(&ackaddr, 0);
-                if (msgsize > 0) {
+                if (msgsize == 0) {
                         /*
                          * We expect the ACK to have come from the
                          * right address.
                          */
-                        if (ackaddr.network != ato->eaddr.network ||
-                                ackaddr.station != ato->eaddr.station) {
+                        if (ackaddr.addr.net != ato->eaddr.network ||
+                                ackaddr.addr.station != ato->eaddr.station) {
                                 if (debug)
-                                        printf("ignoring packet from %d.%d"
+                                        printf("ignoring scout ack packet from %d.%d"
                                                " during other transaction\n",
-                                               ackaddr.network, ackaddr.station);
-                                msgsize = 0;   /* so we'll go round again */
+                                               ackaddr.addr.net, ackaddr.addr.station);
+                                msgsize = -1;   /* so we'll go round again */
                         }
                 }
                 else {
                         count--;
                 }
-        } while (count > 0 && msgsize == 0);
+        } while (count > 0 && msgsize < 0);
 
-        if (msgsize == 0) {
+        if (msgsize < 0) {
                 if (debug)
                         printf("scout ack never arrived from "
                             "%d.%d\n", ato->eaddr.network, ato->eaddr.station);
@@ -343,7 +345,7 @@ econet_xmit(struct aun_packet *spkt, size_t len, struct aun_srcaddr *vto)
                 return -1;
         }
 
-        if (msgsize != 4) {
+        if (msgsize > 0) {
                 if (debug)
                         printf("received wrong-size scout ack packet (%zd) from "
                             "%d.%d\n",
@@ -358,27 +360,33 @@ econet_xmit(struct aun_packet *spkt, size_t len, struct aun_srcaddr *vto)
         payloadlen = len - offsetof(struct aun_packet, data);
         memcpy(sbuf, spkt->data, payloadlen);
         count = 1; // no point retrying here?
+
+        mainaddr.addr.net = ato->eaddr.network;
+        mainaddr.addr.station = ato->eaddr.station;
+        mainaddr.port = 0;
+        mainaddr.cb = 0;
+
         do {
-                econet_send(&ato->eaddr, 0, sbuf, payloadlen);
+                econet_send(&mainaddr, 0, sbuf, payloadlen);
                 msgsize = econet_listen(&ackaddr, 0);
-                if (msgsize > 0) {
+                if (msgsize == 0) {
                         /*
                          * The second ACK, just as above, should
                          * have come from the right address.
                          */
-                        if (ackaddr.network != ato->eaddr.network ||
-                                ackaddr.station != ato->eaddr.station) {
+                        if (ackaddr.addr.net != ato->eaddr.network ||
+                                ackaddr.addr.station != ato->eaddr.station) {
                                 if (debug)
-                                        printf("ignoring packet from %d.%d"
+                                        printf("ignoring payload ack packet from %d.%d"
                                                " during other transaction\n",
-                                               ackaddr.network, ackaddr.station);
-                                msgsize = 0;   /* so we'll go round again */
+                                               ackaddr.addr.net, ackaddr.addr.station);
+                                msgsize = -1;   /* so we'll go round again */
                         }
                 }
                 count--;
-        } while (count > 0 && msgsize == 0);
+        } while (count > 0 && msgsize < 0);
 
-        if (msgsize == 0) {
+        if (msgsize < 0) {
                 if (debug)
                         printf("payload ack never arrived from "
                             "%d.%d\n", ato->eaddr.network, ato->eaddr.station);
@@ -386,7 +394,7 @@ econet_xmit(struct aun_packet *spkt, size_t len, struct aun_srcaddr *vto)
                 return -1;
         }
 
-        if (msgsize != 4) {
+        if (msgsize > 0) {
                 if (debug)
                         printf("received wrong-size payload ack packet (%zd) "
                             "from %d.%d\n",
