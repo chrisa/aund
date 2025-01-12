@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2010 Simon Tatham
+ * Copyright (c) 2021-2025 Chris Andrews <chris@nodnol.org>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -24,8 +24,11 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+
 /*
  * Implementation of AF_ECONET for aund.
+ *
+ * Derived from beebem.c, Copyright (c) 2010 Simon Tatham
  */
 
 #include <sys/types.h>
@@ -73,7 +76,6 @@ union internal_addr {
 
 static void econet_setup(void)
 {
-        //struct sockaddr_ec name;
         int fl;
 
         /*
@@ -301,14 +303,6 @@ econet_xmit(struct aun_packet *spkt, size_t len, struct aun_srcaddr *vto)
         /*
          * Send the scout packet, and wait for an ACK.
          */
-
-        // TODO!!!
-        // This is totally faking scouts!
-        // We are sending a main-data packet of length 2, where the data
-        // is the cb/port, but setting those fields in the sockaddr to zero...
-        // sbuf[0] = 0x80 | spkt->flag;
-        // sbuf[1] = spkt->dest_port;
-
         scoutaddr.addr.net = ato->eaddr.network;
         scoutaddr.addr.station = ato->eaddr.station;
         scoutaddr.cb = 0x80 | spkt->flag;
