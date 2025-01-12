@@ -53,7 +53,7 @@
 #define AUND_FS_DESCR "aund"
 
 /* Econet machine peek type bytes.  Randomly chosen. */
-#define AUND_MACHINE_PEEK_HI 0x50
-#define AUND_MACHINE_PEEK_LO 0x50
+#define AUND_MACHINE_PEEK_HI 0x66
+#define AUND_MACHINE_PEEK_LO 0x40
 
 #endif /* !AUND_VERSION_H */
