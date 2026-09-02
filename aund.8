@@ -31,14 +31,22 @@
 .No Econet/ Ns Tn AUN
 fileserver
 .Sh SYNOPSIS
-.Nm Op Fl dDfsS
+.Nm Op Fl dDEfsS
 .Op Fl c Ar config
 .Op Fl p Ar pidfile
 .Sh DESCRIPTION
 .Nm
-is a fileserver for Acorn clients, either real ones over
+is a fileserver for Acorn clients over a directly connected Econet,
+.Tn AUN ,
+or BeebEm's virtual Econet.
+.Pp
+Without
+.Fl E
+or a BeebEm configuration,
+.Nm
+uses
 .Tn AUN
-or emulated ones over BeebEm's virtual Econet.
+encapsulation.
 .Nm
 runs as a single process under a single user-ID, even when presenting
 multiple user accounts to clients.
@@ -56,6 +64,10 @@ Implies
 .Fl f .
 .It Fl D
 Disable debugging mode, even if it's specified in the configuration file.
+.It Fl E
+Use native
+.Dv AF_ECONET
+datagram sockets to serve a directly connected physical Econet.
 .It Fl f
 Run in the foreground rather than becoming a daemon.
 .It Fl p Ar pidfile

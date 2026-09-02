@@ -69,7 +69,8 @@ static void
 usage(void)
 {
 
-    fprintf(stderr, "usage: %s [-dDfsS] [-c config]\n", progname);
+    fprintf(stderr,
+        "usage: %s [-dDEfsS] [-c config] [-p pidfile]\n", progname);
     exit(EXIT_FAILURE);
 }
 
@@ -109,7 +110,7 @@ main(int argc, char *argv[])
 #endif
 	int override_debug = -1;
 	int override_syslog = -1;
-        int use_af_econet = -1;
+	int use_af_econet = 0;
 
 	progname = argv[0];
 	while ((c = getopt(argc, argv, "c:dDEfp:sS")) != -1) {
@@ -125,14 +126,15 @@ main(int argc, char *argv[])
 		case 'D':
 			override_debug = 0;
 			break;
-        case 'E':
-            use_af_econet = 1;
-            break;
+		case 'E':
+			use_af_econet = 1;
+			break;
 		case 'f':
 			foreground = 1;
 			break;
 		case 'p':
 			pidfile = optarg;
+			break;
 		case 's':
 			override_syslog = 1;
 			break;
@@ -146,8 +148,8 @@ main(int argc, char *argv[])
 	conf_init(conffile);
 	if (beebem_cfg_file)
 		aunfuncs = &beebem;
-    if (use_af_econet)
-        aunfuncs = &econet;
+	if (use_af_econet)
+		aunfuncs = &econet;
 
     fs_init();
 

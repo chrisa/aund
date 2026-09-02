@@ -1225,8 +1225,11 @@ fs_data_send(struct fs_context *c, int fd, size_t size, uint8_t reply_port)
         pkt->type = AUN_TYPE_UNICAST;
         pkt->dest_port = reply_port; //c->req->urd;
         pkt->flag = c->req->aun.flag & 1;
-        if (aunfuncs->xmit(pkt, sizeof(*pkt) + this, c->from) == -1)
+        if (aunfuncs->xmit(pkt, sizeof(*pkt) + this, c->from) == -1) {
             warn("send data");
+            free(pkt);
+            return -1;
+        }
         size -= this;
     }
     free(pkt);
@@ -1251,19 +1254,33 @@ fs_data_recv(struct fs_context *c, int fd, size_t size, int ackport)
         pkt = aunfuncs->recv(&msgsize, &from, OUR_DATA_PORT);
         if (!pkt) {
             warn("receive data");
+            free(ack);
             return -1;     /* no reply: client has gone away */
         }
         msgsize -= sizeof(struct aun_packet);
         if (pkt->dest_port != OUR_DATA_PORT ||
             memcmp(&from, c->from, sizeof(from))) {
             fs_error(c, 0xFF, "I'm confused");
+            free(ack);
+            return -1;
+        }
+        if (msgsize <= 0 || (size_t)msgsize > size) {
+            errno = EPROTO;
+            free(ack);
             return -1;
         }
         result = write(fd, pkt->data, msgsize);
         if (result < 0) {
             fs_errno(c);
+            free(ack);
             return -1;
         }
+        if (result != msgsize) {
+            errno = EIO;
+            free(ack);
+            return -1;
+        }
+        done += (size_t)result;
         size -= msgsize;
         if (size) {
             /*
@@ -1274,8 +1291,11 @@ fs_data_recv(struct fs_context *c, int fd, size_t size, int ackport)
             ack->flag = 0;
             ack->data[0] = 0;
             if (aunfuncs->xmit(ack, sizeof(*ack) + 1, c->from) ==
-                -1)
+                -1) {
                 warn("send data");
+                free(ack);
+                return -1;
+            }
         }
     }
     free(ack);

@@ -19,16 +19,40 @@ struct sockaddr_ec {
   unsigned long cookie;
 };
 
-#define ECTYPE_PACKET_RECEIVED		0	/* Packet received */
-#define ECTYPE_TRANSMIT_STATUS		0x10	/* Transmit completed,
-						   low nibble holds status */
+#define ECTYPE_PACKET_SCOUT             1
+#define ECTYPE_PACKET_DATA              2
+#define ECTYPE_PACKET_ACK               3
+#define ECTYPE_PACKET_BROADCAST         4
+#define ECTYPE_PACKET_IMMEDIATE         5
+#define ECTYPE_PACKET_IMMEDIATE_REPLY   6
 
-#define ECTYPE_TRANSMIT_OK		1
-#define ECTYPE_TRANSMIT_NOT_LISTENING	2
-#define ECTYPE_TRANSMIT_NET_ERROR	3
-#define ECTYPE_TRANSMIT_NO_CLOCK	4
-#define ECTYPE_TRANSMIT_LINE_JAMMED	5
-#define ECTYPE_TRANSMIT_NOT_PRESENT	6
+#define ECTYPE_TRANSMIT_STATUS          0x10
+#define ECTYPE_TRANSMIT_STATUS_MASK     0xf0
+#define ECTYPE_TRANSMIT_RESULT_MASK     0x0f
+
+#define EC_STATUS_OK                    0
+#define EC_STATUS_BAD_STATE             1
+#define EC_STATUS_BAD_TOKEN             2
+#define EC_STATUS_QUEUE_FULL            3
+#define EC_STATUS_BAD_LENGTH            4
+#define EC_STATUS_ABORTED               5
+#define EC_STATUS_TIMEOUT               6
+#define EC_STATUS_LOCAL_ERROR           7
+#define EC_STATUS_DEVICE_DOWN           8
+
+#ifndef SOL_ECONET
+#define SOL_ECONET AF_ECONET
+#endif
+
+#define ECONET_CMSG_SCOUT 1
+#define ECONET_SO_PEER_SERVICE 1
+#define ECONET_PAYLOAD_MTU 32768
+#define ECONET_SCOUT_MAX 1024
+
+struct econet_service {
+  unsigned char port;
+  unsigned char cb;
+};
 
 #ifdef __KERNEL__
 
