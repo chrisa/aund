@@ -309,6 +309,19 @@ static void queue_request(struct queued_request *request)
 	request_tail = request;
 }
 
+static void abandon_inbound(const char *reason)
+{
+	if (inbound.state == IN_IDLE)
+		return;
+	if (debug)
+		warnx("abandoning inbound Econet transaction: %s", reason);
+	free(inbound.request);
+	inbound.request = NULL;
+	memset(&inbound.source, 0, sizeof(inbound.source));
+	inbound.sock = -1;
+	inbound.state = IN_IDLE;
+}
+
 static bool request_matches(const struct queued_request *request,
 			    const struct aun_srcaddr *from, int want_port)
 {
@@ -567,6 +580,8 @@ econet_recv(ssize_t *outsize, struct aun_srcaddr *from, int want_port)
 			if (errno == ETIMEDOUT &&
 			    (forever || time(NULL) < deadline))
 				continue;
+			if (errno == ETIMEDOUT)
+				abandon_inbound("receive watchdog expired");
 			return NULL;
 		}
 	}
