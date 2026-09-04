@@ -49,7 +49,7 @@
 
 #define EC_PORT_FS 0x99
 
-extern const struct aun_funcs aun, beebem, econet;
+extern const struct aun_funcs aun, beebem, econet, econet_stream;
 extern char **environ;
 
 int debug = 0;
@@ -70,7 +70,7 @@ usage(void)
 {
 
     fprintf(stderr,
-        "usage: %s [-dDEfsS] [-c config] [-p pidfile]\n", progname);
+        "usage: %s [-dDEfTsS] [-c config] [-p pidfile]\n", progname);
     exit(EXIT_FAILURE);
 }
 
@@ -110,10 +110,14 @@ main(int argc, char *argv[])
 #endif
 	int override_debug = -1;
 	int override_syslog = -1;
-	int use_af_econet = 0;
+	enum {
+		AF_ECONET_DISABLED,
+		AF_ECONET_DGRAM,
+		AF_ECONET_STREAM,
+	} af_econet_mode = AF_ECONET_DISABLED;
 
 	progname = argv[0];
-	while ((c = getopt(argc, argv, "c:dDEfp:sS")) != -1) {
+	while ((c = getopt(argc, argv, "c:dDEfp:sST")) != -1) {
 		switch (c) {
 		case '?':
 			usage();      /* getopt parsing error */
@@ -127,7 +131,10 @@ main(int argc, char *argv[])
 			override_debug = 0;
 			break;
 		case 'E':
-			use_af_econet = 1;
+			af_econet_mode = AF_ECONET_DGRAM;
+			break;
+		case 'T':
+			af_econet_mode = AF_ECONET_STREAM;
 			break;
 		case 'f':
 			foreground = 1;
@@ -148,8 +155,10 @@ main(int argc, char *argv[])
 	conf_init(conffile);
 	if (beebem_cfg_file)
 		aunfuncs = &beebem;
-	if (use_af_econet)
+	if (af_econet_mode == AF_ECONET_DGRAM)
 		aunfuncs = &econet;
+	else if (af_econet_mode == AF_ECONET_STREAM)
+		aunfuncs = &econet_stream;
 
     fs_init();
 

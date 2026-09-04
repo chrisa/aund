@@ -47,6 +47,7 @@
 
 #include "aun.h"
 #include "extern.h"
+#include "econet_common.h"
 #include "fileserver.h"
 #include "version.h"
 #include "if_ec.h"
@@ -63,19 +64,6 @@ enum econet_socket_id {
 	ECONET_SOCKET_IMMEDIATE,
 	ECONET_SOCKET_COUNT,
 };
-
-struct econet_addr {
-	uint8_t station;
-	uint8_t network;
-};
-
-union internal_addr {
-	struct aun_srcaddr srcaddr;
-	struct econet_addr eaddr;
-};
-
-/* Offset of packet payload in struct aun_packet. */
-#define PKTOFF (offsetof(struct aun_packet, data))
 
 enum inbound_state {
 	IN_IDLE,
@@ -96,26 +84,17 @@ enum outbound_state {
 	OUT_FAILED,
 };
 
-struct queued_request {
-	struct queued_request *next;
-	struct sockaddr_ec source;
-	size_t length;
-	unsigned char data[];
-};
-
 static int sockets[ECONET_SOCKET_COUNT];
-static unsigned char rbuf[65536];
+static unsigned char rbuf[ECONET_RBUF_SIZE];
 static unsigned char phasebuf[ECONET_PAYLOAD_MTU];
-static struct aun_packet *const rpkt = (struct aun_packet *)rbuf;
 static unsigned long next_cookie;
-static struct queued_request *request_head;
-static struct queued_request *request_tail;
+static struct econet_record_queue requests;
 
 static struct {
 	enum inbound_state state;
 	int sock;
 	struct sockaddr_ec source;
-	struct queued_request *request;
+	struct econet_record *request;
 } inbound;
 
 static struct {
@@ -284,31 +263,6 @@ static ssize_t receive_phase(int *source_sock, struct sockaddr_ec *source,
 	return -1;
 }
 
-static struct queued_request *alloc_request(const struct sockaddr_ec *source,
-					    const void *data, size_t length)
-{
-	struct queued_request *request;
-
-	request = malloc(sizeof(*request) + length);
-	if (!request)
-		return NULL;
-	request->next = NULL;
-	request->source = *source;
-	request->length = length;
-	if (length)
-		memcpy(request->data, data, length);
-	return request;
-}
-
-static void queue_request(struct queued_request *request)
-{
-	if (request_tail)
-		request_tail->next = request;
-	else
-		request_head = request;
-	request_tail = request;
-}
-
 static void abandon_inbound(const char *reason)
 {
 	if (inbound.state == IN_IDLE)
@@ -320,41 +274,6 @@ static void abandon_inbound(const char *reason)
 	memset(&inbound.source, 0, sizeof(inbound.source));
 	inbound.sock = -1;
 	inbound.state = IN_IDLE;
-}
-
-static bool request_matches(const struct queued_request *request,
-			    const struct aun_srcaddr *from, int want_port)
-{
-	const union internal_addr *address =
-		(const union internal_addr *)from;
-
-	if ((address->eaddr.network || address->eaddr.station) &&
-	    (address->eaddr.network != request->source.addr.net ||
-	     address->eaddr.station != request->source.addr.station))
-		return false;
-	return !want_port || want_port == request->source.port;
-}
-
-static struct queued_request *take_request(const struct aun_srcaddr *from,
-					   int want_port)
-{
-	struct queued_request *previous = NULL;
-	struct queued_request *request = request_head;
-
-	while (request && !request_matches(request, from, want_port)) {
-		previous = request;
-		request = request->next;
-	}
-	if (!request)
-		return NULL;
-	if (previous)
-		previous->next = request->next;
-	else
-		request_head = request->next;
-	if (request_tail == request)
-		request_tail = previous;
-	request->next = NULL;
-	return request;
 }
 
 static void progress_inbound(void)
@@ -469,7 +388,7 @@ static void handle_status(int source_sock, const struct sockaddr_ec *event)
 	    event->cookie == inbound.source.cookie &&
 	    same_peer(event, &inbound.source)) {
 		if (!error && inbound.state == IN_WAIT_COMPLETE) {
-			queue_request(inbound.request);
+			econet_record_queue(&requests, inbound.request);
 			inbound.request = NULL;
 		} else {
 			free(inbound.request);
@@ -531,8 +450,8 @@ static void handle_phase(int source_sock, const struct sockaddr_ec *source,
 	    source_sock == inbound.sock &&
 	    source->cookie == inbound.source.cookie &&
 	    same_peer(source, &inbound.source)) {
-		inbound.request = alloc_request(&inbound.source, phasebuf,
-						(size_t)length);
+		inbound.request = econet_record_alloc(&inbound.source, phasebuf,
+						      (size_t)length);
 		if (inbound.request)
 			inbound.state = IN_SEND_DATA_ACK;
 		return;
@@ -564,13 +483,13 @@ static int pump_phase(bool forever)
 static struct aun_packet *
 econet_recv(ssize_t *outsize, struct aun_srcaddr *from, int want_port)
 {
-	union internal_addr *address = (union internal_addr *)from;
-	bool forever = !(address->eaddr.network || address->eaddr.station);
+	bool forever = !from->bytes[0] && !from->bytes[1];
 	time_t deadline = time(NULL) + ECONET_RECV_WATCHDOG;
-	struct queued_request *request;
+	struct econet_record *request;
+	struct aun_packet *packet;
 
 	for (;;) {
-		request = take_request(from, want_port);
+		request = econet_record_take(&requests, from, want_port);
 		if (request)
 			break;
 		progress_transactions();
@@ -585,36 +504,19 @@ econet_recv(ssize_t *outsize, struct aun_srcaddr *from, int want_port)
 			return NULL;
 		}
 	}
-	if (request->length > sizeof(rbuf) - PKTOFF) {
-		free(request);
-		errno = EMSGSIZE;
-		return NULL;
-	}
-	if (request->length)
-		memcpy(rbuf + PKTOFF, request->data, request->length);
-	rpkt->type = AUN_TYPE_UNICAST;
-	rpkt->dest_port = request->source.port;
-	rpkt->flag = request->source.cb;
-	rpkt->retrans = 0;
-	memset(rpkt->seq, 0, sizeof(rpkt->seq));
-	*outsize = request->length + PKTOFF;
-	memset(address, 0, sizeof(*from));
-	address->eaddr.network = request->source.addr.net;
-	address->eaddr.station = request->source.addr.station;
+	packet = econet_record_to_aun(request, rbuf, sizeof(rbuf), outsize,
+	    from);
 	free(request);
-	return rpkt;
+	return packet;
 }
 
 static ssize_t
 econet_xmit(struct aun_packet *packet, size_t length, struct aun_srcaddr *to)
 {
-	union internal_addr *address = (union internal_addr *)to;
+	const void *data;
+	size_t data_length;
 	time_t deadline = time(NULL) + ECONET_XMIT_WATCHDOG;
 
-	if (length < PKTOFF || length - PKTOFF > ECONET_PAYLOAD_MTU) {
-		errno = EMSGSIZE;
-		return -1;
-	}
 	if (outbound.state != OUT_IDLE && outbound.state != OUT_DONE &&
 	    outbound.state != OUT_FAILED) {
 		errno = EBUSY;
@@ -622,14 +524,12 @@ econet_xmit(struct aun_packet *packet, size_t length, struct aun_srcaddr *to)
 	}
 	memset(&outbound, 0, sizeof(outbound));
 	outbound.sock = sockets[ECONET_SOCKET_FS];
-	outbound.destination.sec_family = AF_ECONET;
-	outbound.destination.port = packet->dest_port;
-	outbound.destination.cb = 0x80 | packet->flag;
-	outbound.destination.addr.net = address->eaddr.network;
-	outbound.destination.addr.station = address->eaddr.station;
+	if (econet_prepare_xmit(packet, length, to,
+	    &outbound.destination, &data, &data_length) < 0)
+		return -1;
 	outbound.destination.cookie = econet_next_cookie();
-	outbound.data = packet->data;
-	outbound.length = length - PKTOFF;
+	outbound.data = data;
+	outbound.length = data_length;
 	outbound.state = OUT_SEND_SCOUT;
 
 	while (outbound.state != OUT_DONE && outbound.state != OUT_FAILED) {
@@ -652,31 +552,11 @@ econet_xmit(struct aun_packet *packet, size_t length, struct aun_srcaddr *to)
 	return (ssize_t)length;
 }
 
-static char *
-econet_ntoa(struct aun_srcaddr *from)
-{
-	union internal_addr *address = (union internal_addr *)from;
-	static char text[80];
-
-	sprintf(text, "station %d.%d", address->eaddr.network,
-		address->eaddr.station);
-	return text;
-}
-
-static void
-econet_get_stn(struct aun_srcaddr *from, uint8_t *out)
-{
-	union internal_addr *address = (union internal_addr *)from;
-
-	out[0] = address->eaddr.station;
-	out[1] = address->eaddr.network;
-}
-
 const struct aun_funcs econet = {
 	ECONET_PAYLOAD_MTU,
 	econet_setup,
 	econet_recv,
 	econet_xmit,
-	econet_ntoa,
-	econet_get_stn,
+	econet_ntoa_common,
+	econet_get_stn_common,
 };

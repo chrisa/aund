@@ -144,8 +144,8 @@ am_aund_OBJECTS = aund.$(OBJEXT) fileserver.$(OBJEXT) fs_cli.$(OBJEXT) \
 	fs_examine.$(OBJEXT) fs_fileio.$(OBJEXT) fs_misc.$(OBJEXT) \
 	fs_handle.$(OBJEXT) fs_util.$(OBJEXT) fs_error.$(OBJEXT) \
 	fs_nametrans.$(OBJEXT) fs_filetype.$(OBJEXT) aun.$(OBJEXT) \
-	beebem.$(OBJEXT) econet.$(OBJEXT) pw.$(OBJEXT) \
-	user_null.$(OBJEXT)
+	beebem.$(OBJEXT) econet.$(OBJEXT) econet_stream.$(OBJEXT) \
+	econet_common.$(OBJEXT) pw.$(OBJEXT) user_null.$(OBJEXT)
 aund_OBJECTS = $(am_aund_OBJECTS)
 aund_DEPENDENCIES = libconf_lex.a $(LIBOBJS)
 AM_V_P = $(am__v_P_@AM_V@)
@@ -165,6 +165,7 @@ depcomp = $(SHELL) $(top_srcdir)/depcomp
 am__maybe_remake_depfiles = depfiles
 am__depfiles_remade = ./$(DEPDIR)/aun.Po ./$(DEPDIR)/aund.Po \
 	./$(DEPDIR)/beebem.Po ./$(DEPDIR)/econet.Po \
+	./$(DEPDIR)/econet_common.Po ./$(DEPDIR)/econet_stream.Po \
 	./$(DEPDIR)/fileserver.Po ./$(DEPDIR)/fs_cli.Po \
 	./$(DEPDIR)/fs_error.Po ./$(DEPDIR)/fs_examine.Po \
 	./$(DEPDIR)/fs_fileio.Po ./$(DEPDIR)/fs_filetype.Po \
@@ -376,7 +377,8 @@ aund_SOURCES = extern.h aund.c \
 	fileserver.c fs_cli.c fs_examine.c \
 	fs_fileio.c fs_misc.c fs_handle.c fs_util.c fs_error.c \
 	fs_nametrans.c fs_filetype.c \
-	aun.h aun.c beebem.c econet.c if_ec.h pw.c user_null.c \
+	aun.h aun.c beebem.c econet.c econet_stream.c econet_common.c \
+	econet_common.h if_ec.h pw.c user_null.c \
 	version.h
 
 aund_LDADD = libconf_lex.a $(LIBOBJS)
@@ -511,6 +513,8 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/aund.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/beebem.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/econet.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/econet_common.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/econet_stream.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/fileserver.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/fs_cli.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/fs_error.Po@am__quote@ # am--include-marker
@@ -927,6 +931,8 @@ distclean: distclean-am
 	-rm -f ./$(DEPDIR)/aund.Po
 	-rm -f ./$(DEPDIR)/beebem.Po
 	-rm -f ./$(DEPDIR)/econet.Po
+	-rm -f ./$(DEPDIR)/econet_common.Po
+	-rm -f ./$(DEPDIR)/econet_stream.Po
 	-rm -f ./$(DEPDIR)/fileserver.Po
 	-rm -f ./$(DEPDIR)/fs_cli.Po
 	-rm -f ./$(DEPDIR)/fs_error.Po
@@ -991,6 +997,8 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ./$(DEPDIR)/aund.Po
 	-rm -f ./$(DEPDIR)/beebem.Po
 	-rm -f ./$(DEPDIR)/econet.Po
+	-rm -f ./$(DEPDIR)/econet_common.Po
+	-rm -f ./$(DEPDIR)/econet_stream.Po
 	-rm -f ./$(DEPDIR)/fileserver.Po
 	-rm -f ./$(DEPDIR)/fs_cli.Po
 	-rm -f ./$(DEPDIR)/fs_error.Po

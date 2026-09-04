@@ -31,7 +31,7 @@
 .No Econet/ Ns Tn AUN
 fileserver
 .Sh SYNOPSIS
-.Nm Op Fl dDEfsS
+.Nm Op Fl dDEfTsS
 .Op Fl c Ar config
 .Op Fl p Ar pidfile
 .Sh DESCRIPTION
@@ -41,7 +41,8 @@ is a fileserver for Acorn clients over a directly connected Econet,
 or BeebEm's virtual Econet.
 .Pp
 Without
-.Fl E
+.Fl E ,
+.Fl T ,
 or a BeebEm configuration,
 .Nm
 uses
@@ -68,6 +69,11 @@ Disable debugging mode, even if it's specified in the configuration file.
 Use native
 .Dv AF_ECONET
 datagram sockets to serve a directly connected physical Econet.
+.It Fl T
+Use native
+.Dv AF_ECONET
+stream sockets for complete four-way transactions.  Immediate MachinePeek
+requests continue to use a datagram socket.
 .It Fl f
 Run in the foreground rather than becoming a daemon.
 .It Fl p Ar pidfile
