@@ -1,0 +1,5 @@
+aund (1.7.1+econet1) unstable; urgency=medium
+
+  * Package the native AF_ECONET transport for Raspberry Pi OS.
+
+ -- Chris Andrews <chris@nodnol.org>  Fri, 04 Sep 2026 22:00:00 +0100

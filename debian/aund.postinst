@@ -1,0 +1,15 @@
+#!/bin/sh
+set -e
+
+if [ "$1" = configure ]; then
+    if ! getent group aund >/dev/null; then
+        addgroup --system aund
+    fi
+    if ! getent passwd aund >/dev/null; then
+        adduser --system --ingroup aund --home /srv/acorn \
+            --no-create-home --disabled-login --disabled-password aund
+    fi
+    install -d -o aund -g aund -m 0755 /srv/acorn
+fi
+
+#DEBHELPER#

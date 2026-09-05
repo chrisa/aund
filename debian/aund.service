@@ -1,0 +1,17 @@
+[Unit]
+Description=Acorn Universal Networking fileserver
+Documentation=man:aund(8)
+Requires=econet-hat.service
+After=econet-hat.service
+ConditionPathExists=/sys/class/net/econet0
+
+[Service]
+Type=simple
+User=aund
+Group=aund
+RuntimeDirectory=aund
+ExecStart=/usr/bin/aund -f -T -c /etc/aund/aund.conf -p /run/aund/aund.pid
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

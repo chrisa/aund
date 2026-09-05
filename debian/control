@@ -1,0 +1,26 @@
+Source: aund
+Section: net
+Priority: optional
+Maintainer: Chris Andrews <chris@nodnol.org>
+Build-Depends:
+ debhelper-compat (= 13),
+ autoconf,
+ automake,
+ dh-autoreconf,
+ flex,
+ libcrypt-dev
+Standards-Version: 4.7.2
+Rules-Requires-Root: no
+Homepage: https://github.com/chrisa/aund
+
+Package: aund
+Architecture: any
+Depends:
+ ${misc:Depends},
+ ${shlibs:Depends},
+ adduser,
+ econet-hat
+Description: Acorn Universal Networking fileserver with native Econet support
+ aund is an Acorn fileserver for RISC OS and BBC Micro clients.  This build
+ includes the native Linux AF_ECONET stream transport used by the Raspberry Pi
+ Econet HAT.

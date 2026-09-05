@@ -1,0 +1,19 @@
+#!/usr/bin/make -f
+
+export DEB_BUILD_MAINT_OPTIONS = hardening=+all
+
+%:
+	dh $@ --with autoreconf --builddirectory=obj-debian
+
+override_dh_auto_configure:
+	dh_auto_configure -- --bindir=/usr/bin
+
+override_dh_auto_install:
+	dh_auto_install
+	install -Dm0644 aund.conf.example debian/aund/etc/aund/aund.conf
+
+override_dh_auto_clean:
+	rm -rf obj-debian
+
+override_dh_clean:
+	dh_clean -X.bak -X~
